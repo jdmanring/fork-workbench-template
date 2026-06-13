@@ -18,7 +18,7 @@ These aren't in conflict. The same workflow produces both: patches that are clea
 
 **Synchronization:** A three-gate ingest pipeline fetches upstream, merges into a staging branch, runs build + lint + tests, and only promotes to `integration` after all gates pass. Fork-specific files are restored automatically after every merge. Last-known-good tags provide one-command rollback if something bad lands upstream.
 
-**Contribution quality:** Each branch carries exactly one change, starts from `upstream-mirror` (so it contains no fork history), and comes with two pre-written files — an issue draft and a PR draft. When you're ready to file, the upstream issue title and body are ready to paste, and the PR description is fully filled in.
+**Contribution quality:** Each branch carries exactly one change, starts from `upstream-mirror` (so it contains no fork history), and comes with two pre-written files — an issue draft and a PR draft. When you're ready to file, the upstream issue title and body are ready to paste, and the PR description is fully filled in. The intended workflow is agent-assisted: an AI agent does the research, implements the fix, and writes both drafts while the context is fresh; the human author reviews and files. The agent never files — upstream projects prohibit agent-filed PRs, and a human author is required to stand behind the submission.
 
 **Filter output:** `main` is a curated merge of upstream plus your patches, verified by the same gates as the ingest pipeline, tagged for downstream consumers to pin against.
 
@@ -135,6 +135,8 @@ without       history.           is fresh.          then open PR.
 an issue.
 ```
 
+There are two separate issues involved and they serve different purposes. The **fork-side tracking issue** (first column) is filed on your own fork's issue tracker before you branch — it's how you track in-progress work and ensure no branch exists without a record. The **upstream issue** (last column) is filed against the upstream project at submission time, using a pre-written draft. They are filed at different points in the workflow and go to different places.
+
 The issue draft and PR draft are separate files in `docs/fork/upstream/`. Both are pre-written with the upstream project's exact templates — issue body fully filled out, PR description with all required sections pre-checked. The two-step filing order (issue before PR) is what most upstream CONTRIBUTING.md files require, and having the drafts pre-written is the only way this step doesn't become a bottleneck.
 
 When a related upstream issue already exists, file a new one scoped to your specific contribution and reference the existing issue in the body. "Fixes" goes on an issue you filed; `Related to #NNN` references an issue someone else filed.
@@ -211,7 +213,10 @@ tooling/sync-upstreams/
 **1. Create the branch structure**
 
 ```bash
-git checkout -b upstream-mirror origin/main   # track upstream's default branch
+git remote add upstream <upstream-repo-url>   # the project you are forking
+git fetch upstream
+
+git checkout -b upstream-mirror upstream/main # track upstream's default branch
 git checkout -b integration upstream-mirror
 git checkout -b develop integration
 git checkout -b main develop                  # stable release branch
