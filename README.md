@@ -8,11 +8,19 @@ This template solves both problems — keeping the fork synchronized and making 
 
 ## The Core Idea
 
-A fork is a contribution workbench, not a divergent product. Every fix and feature should be staged as a standalone upstream PR. That requires two things working simultaneously: a pipeline that keeps the fork current without contaminating your work, and a workflow that produces clean, reviewable contributions from day one.
+This template serves two purposes simultaneously, and they reinforce each other.
+
+**As a contribution platform:** Every fix and feature is staged as a standalone upstream PR — clean branch from `upstream-mirror`, pre-written issue draft, pre-written PR description. Filing an upstream contribution takes minutes, not an afternoon.
+
+**As a curated filter:** Your `main` branch is the output of passing upstream through your patches and verification gates. It represents a specific, known-good state — this version of the upstream project, with these fixes applied — that downstream consumers can track directly. Whether upstream eventually accepts your PRs or not, `main` provides a stable, tested distribution.
+
+These aren't in conflict. The same workflow produces both: patches that are clean enough to file upstream are also clean enough to ship on `main`. The pipeline keeps everything synchronized so the filter output stays current without manual work.
 
 **Synchronization:** A three-gate ingest pipeline fetches upstream, merges into a staging branch, runs build + lint + tests, and only promotes to `integration` after all gates pass. Fork-specific files are restored automatically after every merge. Last-known-good tags provide one-command rollback if something bad lands upstream.
 
-**Contribution quality:** Each branch carries exactly one change, starts from `upstream-mirror` (so it contains no fork history), and comes with two pre-written files — an issue draft and a PR draft. When you're ready to file, the upstream issue title and body are ready to paste, and the PR description is fully filled in. Filing an upstream contribution takes minutes, not an afternoon.
+**Contribution quality:** Each branch carries exactly one change, starts from `upstream-mirror` (so it contains no fork history), and comes with two pre-written files — an issue draft and a PR draft. When you're ready to file, the upstream issue title and body are ready to paste, and the PR description is fully filled in.
+
+**Filter output:** `main` is a curated merge of upstream plus your patches, verified by the same gates as the ingest pipeline, tagged for downstream consumers to pin against.
 
 ---
 
@@ -229,7 +237,7 @@ python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --push     # first re
 These patterns exist and are used in production, but are intentionally excluded because they add complexity without proportional benefit for most forks:
 
 - **AI-assisted conflict resolution** — emerging tooling (vibegit, forksync) but not yet reliable enough for production use in a contribution workbench
-- **Two-remote fork-as-filter architecture** — useful for private monorepos that cannot be GitHub forks; for a normal fork, a single pipeline on one remote is simpler and sufficient
+- **Two-remote non-fork ingestion** — useful for private monorepos that cannot be GitHub forks of the upstream project and need to ingest from multiple sources; for a normal public fork, a single pipeline on one remote is simpler and sufficient
 - **Merge queue gating** — Nixpkgs' two-stage merge queue is designed for a repo with thousands of contributors; staging branch isolation gives the same safety guarantee with far less infrastructure
 - **Auto-merge bots** — appropriate for dependency updates but not for upstream sync, which requires human judgment about what landed and what conflicts need resolution
 
