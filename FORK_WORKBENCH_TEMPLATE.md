@@ -279,7 +279,14 @@ git rebase upstream-mirror
 
 ## Releasing to Main
 
-When ready to publish a stable release for downstream consumers:
+`main` is the stable distribution branch — upstream fully ingested, all patches applied, tested, and tagged. It has two distinct audiences:
+
+- **Direct consumers** who want a patched version of the upstream project without managing the patches themselves. They pin to `main` and get stable, tested updates.
+- **Downstream forks** that use your `main` as their own upstream source. A downstream project can run your fork's `main` through its own ingest pipeline, receiving your patches pre-applied. This composes naturally: `upstream → your fork's main → downstream project's integration → develop`.
+
+`main` is a one-way output. Never pull it back into `develop` or use it as a branch origin for new work.
+
+When ready to publish a stable release:
 
 ### Pre-release checklist
 

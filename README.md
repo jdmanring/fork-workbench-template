@@ -34,9 +34,13 @@ sync/staging-TIMESTAMP
 integration      ←── LKG-YYYYMMDD-HHMM tag created here
     │  manual merge (after review)
     ▼
-develop
-    ▲
-    └── contribution commits cherry-picked here too
+develop          ←── contribution commits cherry-picked here too
+    │  --no-ff merge when releasing
+    ▼
+main             ←── tagged stable releases (v2026.06.12, v1.2.3, ...)
+    │
+    ▼
+downstream consumers — scripts, CI, other forks that ingest this as their upstream
 ```
 
 `integration` is never touched until all three gates pass. On any failure, it's left exactly as it was. The staging branch is cleaned up regardless of outcome.
@@ -47,14 +51,20 @@ develop
 
 There are exactly two kinds of work branches. This distinction is the most important thing to get right.
 
-| Work type | Branch from | Goes to `develop` via | Upstream PR? |
-|-----------|-------------|----------------------|--------------|
-| Fix, feature, docs, refactor | `upstream-mirror` | cherry-pick | Yes — this is the default |
-| Pipeline, fork CI, fork docs | `develop` | merge | No |
+| Branch | Role | Direction |
+|--------|------|-----------|
+| `upstream-mirror` | Exact copy of upstream HEAD | Read-only input |
+| `integration` | Gated, verified upstream changes | Pipeline output only |
+| `develop` | Active working branch | Receives cherry-picks and fork-only merges |
+| `main` | Stable releases — upstream + all patches applied | One-way output; never pulled back in |
+| `feat/*` `fix/*` | Upstream-candidate contributions | Branch from `upstream-mirror`; cherry-pick to `develop` |
+| Fork-only branches | Pipeline, CI, fork docs | Branch from `develop`; merge to `develop` |
 
-**The default is upstream-candidate.** Fork-only is the narrow exception: the sync pipeline, the CI workflow, and the docs in `docs/fork/`. Everything else — bug fixes, features, documentation, new files — defaults to upstream-candidate.
+**Contribution branches default to upstream-candidate.** Fork-only is the narrow exception: the sync pipeline, the CI workflow, and the docs in `docs/fork/`. Everything else — bug fixes, features, documentation, new files — defaults to upstream-candidate.
 
 Upstream-candidate branches start from `upstream-mirror` and contain zero fork history. This is what makes them PR-ready from day one. Starting from `develop` instead is the most common mistake and produces branches that cannot be submitted without rebasing off hundreds of commits.
+
+**`main` is a one-way output.** It is never pulled back into `develop` or used as a branch origin. Work only flows in one direction: upstream → develop → main → downstream consumers.
 
 ```bash
 # The right way to start an upstream-candidate branch
@@ -83,6 +93,41 @@ an issue.
 The issue draft and PR draft are separate files in `docs/fork/upstream/`. Both are pre-written with the upstream project's exact templates — issue body fully filled out, PR description with all required sections pre-checked. The two-step filing order (issue before PR) is what most upstream CONTRIBUTING.md files require, and having the drafts pre-written is the only way this step doesn't become a bottleneck.
 
 When a related upstream issue already exists, file a new one scoped to your specific contribution and reference the existing issue in the body. "Fixes" goes on an issue you filed; `Related to #NNN` references an issue someone else filed.
+
+---
+
+## The Release Track
+
+`develop` contains everything — upstream changes, applied patches, work in progress. `main` is the curated stable cut: upstream fully ingested, all patches applied, tested, tagged.
+
+```bash
+git checkout main
+git merge develop --no-ff -m "release: upstream sync + patches v2026.06.12"
+git tag -a "v2026.06.12" -m "Release v2026.06.12"
+git push origin main --follow-tags
+```
+
+`--no-ff` is deliberate. The merge commit records exactly when the release happened and what it contained. `git log --first-parent main` gives a clean release timeline.
+
+**Why this matters:** `main` is a distribution, not just a branch. It represents a known-good state: this version of the upstream project, with these specific patches applied, verified by the pipeline gates. That's something with standalone value.
+
+Two concrete uses:
+
+**People who want a patched version.** They can pin to `main`, track it like any dependency, and get stable updates when you release. They don't have to apply your patches themselves, and they're not riding the bleeding edge of `develop`.
+
+**Downstream forks that want to build on your patches.** A downstream project can use your fork's `main` as its own upstream source — ingesting it through its own pipeline the same way you ingest from the original upstream. Your patches arrive pre-applied and pre-tested. The downstream project doesn't need to know how the patches were produced; it just tracks a clean, releasable branch.
+
+```
+upstream project
+    ↓  (your ingest pipeline)
+your fork's main  ←── tagged, stable, patched
+    ↓  (downstream's ingest pipeline)
+downstream project's integration → develop
+```
+
+This chain works cleanly because `main` contains only what the downstream project needs: upstream changes plus your patches, with no fork-management state, no staging branches, no issue-drafts directory visible to the downstream pipeline.
+
+**Hotfixes:** If a critical fix needs to land on `main` but `develop` has unreleased work, branch from `main`, fix it there, merge to `main`, then cherry-pick back to `develop`. Never let `main` drift ahead of `develop` without syncing the fix back. See `FORK_WORKBENCH_TEMPLATE.md` for the full hotfix procedure.
 
 ---
 
@@ -124,7 +169,8 @@ tooling/sync-upstreams/
 git checkout -b upstream-mirror origin/main   # track upstream's default branch
 git checkout -b integration upstream-mirror
 git checkout -b develop integration
-git push origin upstream-mirror integration develop
+git checkout -b main develop                  # stable release branch
+git push origin upstream-mirror integration develop main
 ```
 
 **2. Configure the pipeline**
