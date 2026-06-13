@@ -24,13 +24,19 @@ These aren't in conflict. The same workflow produces both: patches that are clea
 
 ---
 
-## How the Pipeline Works
+## How It Works
+
+There are two flows. They share a starting point — `upstream-mirror` — but move in opposite directions.
+
+### Ingest: upstream → your fork
+
+Keeps your fork synchronized with the upstream project.
 
 ```
 upstream/main
     │  fetch + reset
     ▼
-upstream-mirror  ←── contribution branches start here
+upstream-mirror
     │  merge into throwaway staging branch
     ▼
 sync/staging-TIMESTAMP
@@ -40,18 +46,49 @@ sync/staging-TIMESTAMP
     │  Protected files restored to integration state
     ▼
 integration      ←── LKG-YYYYMMDD-HHMM tag created here
-    │  manual merge (after review)
+    │  manual merge after review
     ▼
-develop          ←── contribution commits cherry-picked here too
+develop
     │  --no-ff merge when releasing
     ▼
 main             ←── tagged stable releases (v2026.06.12, v1.2.3, ...)
     │
     ▼
-downstream consumers — scripts, CI, other forks that ingest this as their upstream
+downstream consumers
 ```
 
-`integration` is never touched until all three gates pass. On any failure, it's left exactly as it was. The staging branch is cleaned up regardless of outcome.
+`integration` is never touched until all three gates pass. On any failure, it is left exactly as it was and the staging branch is deleted.
+
+### Contribute: your fork → upstream
+
+Stages clean contributions and files them as upstream pull requests.
+
+```
+upstream-mirror
+    │  branch from here — zero fork history
+    ▼
+fix/branch-name  (one logical change, one clean commit)
+    │
+    ├──► cherry-pick ──► develop   (fix is live in your working branch)
+    │
+    │  write drafts while context is fresh
+    ▼
+issue-drafts/<name>.md             pr-drafts/<name>.md
+    │  title + body                    │  title + full description
+    │  ready to paste                  │  all sections pre-filled
+    │                                  │
+    ▼                                  │
+file upstream issue  ◄─────────────────┘
+    │  receive issue number
+    │  fill into Fixes # in PR draft
+    ▼
+file upstream PR: fix/branch-name → upstream:dev
+    │
+    ▼
+upstream/main  (after acceptance)
+```
+
+The branch stays after the cherry-pick — it is the upstream PR staging target. One branch per concern. The issue is always filed before the PR.
 
 ---
 
