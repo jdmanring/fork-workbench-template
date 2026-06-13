@@ -1,0 +1,105 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 3am UTC daily
+  workflow_dispatch:        # manual trigger from GitHub UI
+
+# ── Concurrency control ──────────────────────────────────────────
+# Only one sync at a time. Cancel in-progress runs on new trigger
+# so a manual re-run supersedes a stuck scheduled run.
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write          # needed for failure notification
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Don't run on forks that haven't configured the upstream remote
+    if: github.repository != '<upstream-org>/<project>'
+
+    steps:
+      # ── Option A: GitHub App token (recommended) ──────────────
+      # Uses short-lived, scoped tokens. No long-lived PAT to manage.
+      # Setup: Create a GitHub App with Contents + Issues write,
+      #        install it on the repo, set APP_ID + APP_PRIVATE_KEY secrets.
+      # - name: Generate GitHub App token
+      #   id: app-token
+      #   uses: actions/create-github-app-token@v2
+      #   with:
+      #     app-id: ${{ secrets.APP_ID }}
+      #     private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      #
+      # - name: Checkout integration branch
+      #   uses: actions/checkout@v4
+      #   with:
+      #     ref: integration
+      #     fetch-depth: 0
+      #     token: ${{ steps.app-token.outputs.token }}
+
+      # ── Option B: PAT (simpler setup) ─────────────────────────
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/<upstream-org>/<project>.git
+          git fetch upstream <upstream-default-branch>
+
+      - name: Ensure upstream-mirror branch exists locally
+        run: |
+          git fetch origin upstream-mirror:upstream-mirror || \
+          git checkout -b upstream-mirror upstream/<upstream-default-branch>
+
+      # ── Python ecosystem ──
+      # - name: Set up Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.12"
+      #
+      # - name: Install pipeline dependencies
+      #   run: pip install ruff
+      #
+      # - name: Run ingest pipeline (CI mode)
+      #   run: |
+      #     python tooling/sync-upstreams/upstream_ingest_pipeline.py --skip-tests --push
+
+      # ── Node.js ecosystem ──
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "22"
+      #
+      # - name: Install pnpm
+      #   uses: pnpm/action-setup@v4
+      #
+      # - name: Install dependencies
+      #   run: pnpm install --frozen-lockfile
+      #
+      # - name: Run ingest pipeline (CI mode)
+      #   run: |
+      #     bash tooling/sync-upstreams/upstream_ingest_pipeline.sh --skip-tests --push
+
+      # ── Failure notification ──────────────────────────────────
+      # Posts a comment on a tracking issue when the pipeline fails.
+      # Create an issue titled "Upstream Sync" and set SYNC_ISSUE_NUMBER.
+      # - name: Notify on failure
+      #   if: failure()
+      #   run: |
+      #     gh issue comment ${{ secrets.SYNC_ISSUE_NUMBER }} \
+      #       --body "⚠️ Upstream sync failed on $(date -u +%Y-%m-%d-%H%M UTC). Run ID: ${{ github.run_id }}. See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GH_PAT || steps.app-token.outputs.token }}

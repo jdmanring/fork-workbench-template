@@ -1,0 +1,99 @@
+name: Sync upstream (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      upstream-remote:
+        description: 'URL of the upstream repository'
+        required: true
+        type: string
+      upstream-branch:
+        description: 'Upstream branch to track'
+        required: false
+        default: 'main'
+        type: string
+      integration-branch:
+        description: 'Local integration branch name'
+        required: false
+        default: 'integration'
+        type: string
+      ecosystem:
+        description: 'Project ecosystem (determines which pipeline script to run)'
+        required: true
+        type: string
+        # Options: python, node, rust, go
+      skip-tests:
+        description: 'Skip the test gate'
+        required: false
+        default: true
+        type: boolean
+      notify-issue:
+        description: 'Issue number to comment on when sync fails (0 to disable)'
+        required: false
+        default: 0
+        type: number
+
+concurrency:
+  group: upstream-sync-${{ inputs.integration-branch }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.integration-branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream "${{ inputs.upstream-remote }}" || git remote set-url upstream "${{ inputs.upstream-remote }}"
+          git fetch upstream "${{ inputs.upstream-branch }}"
+
+      - name: Ensure upstream-mirror branch exists locally
+        run: |
+          git fetch origin upstream-mirror:upstream-mirror || \
+          git checkout -b upstream-mirror upstream/${{ inputs.upstream-branch }}
+
+      # ── Ecosystem-specific setup ──────────────────────────────
+      # Uncomment the block that matches your ecosystem.
+      # The pipeline script handles all gates internally.
+
+      # Python:
+      # - uses: actions/setup-python@v5
+      #   with: { python-version: "3.12" }
+      # - run: pip install ruff
+      # - run: python tooling/sync-upstreams/upstream_ingest_pipeline.py ${{ inputs.skip-tests && '--skip-tests' || '' }} --push
+
+      # Node.js:
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: "22" }
+      # - uses: pnpm/action-setup@v4
+      # - run: pnpm install --frozen-lockfile
+      # - run: bash tooling/sync-upstreams/upstream_ingest_pipeline.sh ${{ inputs.skip-tests && '--skip-tests' || '' }} --push
+
+      - name: Run ingest pipeline
+        run: |
+          echo "ERROR: No ecosystem configured. Uncomment one in this workflow."
+          exit 1
+
+      - name: Notify on failure
+        if: failure() && inputs.notify-issue > 0
+        run: |
+          gh issue comment ${{ inputs.notify-issue }} \
+            --body "⚠️ Upstream sync failed on $(date -u +%Y-%m-%d-%H%M UTC). Run ID: ${{ github.run_id }}. See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
