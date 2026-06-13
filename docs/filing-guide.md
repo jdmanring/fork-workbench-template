@@ -11,7 +11,7 @@ How to file a professional, complete upstream issue and pull request from a cont
 ### Before You File
 
 1. Search existing issues on the upstream repo for the bug or feature. Duplicate issues are closed without comment.
-2. Check your `docs/fork/upstream/pr-status.md` — if a staging branch already fixes the bug, you may be able to skip the issue and file the PR directly (with a clear problem statement in the PR body).
+2. Check `docs/fork/upstream/pr-status.md` — if a staging branch already fixes this, the issue draft is in `docs/fork/upstream/issue-drafts/`.
 3. Verify the fix is not already in `upstream-mirror`: `git diff upstream-mirror develop -- <relevant file>`
 
 ### Bug Issue Template

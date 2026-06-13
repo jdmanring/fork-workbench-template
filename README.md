@@ -1,105 +1,184 @@
-# Fork Workbench Template
+# Fork Workbench
 
-A comprehensive, multi-ecosystem template for managing a fork as a contribution workbench. Includes documentation, pipeline scripts, CI workflows, and a runbook — everything needed to operate a fork that:
+A structured system for maintaining a fork as a contribution platform — not a divergent product.
 
-1. Stays synchronized with upstream
-2. Stages clean, individual upstream contributions
-3. Releases a stable downstream product
+The premise: every fix and feature developed in a fork should be staged as a clean upstream contribution. That means the fork stays synchronized, each branch carries exactly one change, and when you're ready to file a PR, the issue body and PR description are already written and ready to paste. This template provides the full system — pipeline, branch rules, staging workflow, filing guide, and CI.
 
-## Project Structure
+---
+
+## The Problem This Solves
+
+Maintaining a fork long-term is harder than it looks. The common failure mode: you patch something locally, upstream keeps moving, your branch accumulates unrelated changes, and six months later you have a fork that can't be contributed back without a full rewrite. Or you file a PR and the maintainers close it for missing test steps, no linked issue, or screenshots that weren't attached.
+
+This template solves both problems:
+
+1. **Drift** — a three-gate ingest pipeline keeps your fork synchronized with upstream daily. Protected files survive every merge automatically.
+2. **Contribution quality** — a staging workflow that produces professional, reviewable PRs: standalone branches from `upstream-mirror`, pre-written issue drafts, pre-filled PR descriptions with all required sections.
+
+---
+
+## How It Works
 
 ```
-fork-workbench-template/
-├── CONTRIBUTING.md                     # How upstream contributors interact with this fork
-├── FORK_WORKBENCH_TEMPLATE.md          # Main guide — branch architecture, rules, workflow
-├── README.md                           # This file
-├── docs/
-│   ├── fork/
-│   │   ├── README.md                   # Fork management hub — navigation
-│   │   ├── issue-tracker.md            # Issue-to-branch mapping
-│   │   ├── changes-from-upstream.md    # Master record of all fork divergence
-│   │   └── upstream/
-│   │       └── pr-status.md            # Status of all staged upstream PRs
-│   └── runbook.md                      # Pipeline failure recovery — every failure mode
-├── tooling/
-│   └── sync-upstreams/
-│       ├── upstream_ingest_pipeline.py   # Python/uv pipeline
-│       ├── upstream_ingest_pipeline.sh   # Node.js/pnpm pipeline
-│       ├── rollback_to_lkg.py            # Roll back integration to a previous LKG tag
-│       └── gate_failure_tests.py         # Verify pipeline gates correctly block failures
-└── .github/
-    └── workflows/
-        ├── sync-upstream.yml             # Scheduled CI: daily auto-ingest (standalone)
-        └── sync-upstream-reusable.yml    # Reusable workflow (workflow_call) for composability
+upstream/main
+    ↓  fetch + reset
+upstream-mirror                 ← contribution branches start here
+    ↓  merge into temp staging
+sync/staging-TIMESTAMP
+    ↓  Gate 1: Build check
+    ↓  Gate 2: Lint
+    ↓  Gate 3: Tests
+integration  ← LKG-TIMESTAMP tag created here
+    ↓  manual merge (after review)
+develop
+    ↑  contribution commits cherry-picked here too
 ```
 
-## Quick Start
+Every upstream sync goes through staging first. `integration` is never touched until all three gates pass. On any failure, `integration` is left exactly as it was.
 
-First time setting up the workbench? Do this in order:
+---
+
+## Branch Rules
+
+There are two kinds of work branches. Getting this wrong is the most common mistake.
+
+| Work type | Branch from | Merge to | Goes upstream? |
+|-----------|-------------|----------|----------------|
+| Fix, feature, docs, refactor | `upstream-mirror` | `develop` (cherry-pick) | Yes — this is the default |
+| Pipeline, fork CI, fork docs | `develop` | `develop` (merge) | No — narrow exception |
+
+**The default is upstream-candidate.** Fork-only is the narrow exception. If you're unsure, it's upstream-candidate.
 
 ```bash
-# 1. Create the required branches
-git checkout -b upstream-mirror origin/main   # or upstream's default branch
+# Upstream-candidate branch
+git fetch origin upstream-mirror
+git checkout -b fix/thing origin/upstream-mirror
+# ... make the change, single clean commit ...
+git checkout develop && git cherry-pick <hash>
+git checkout fix/thing   # branch stays — it's the upstream PR staging
+```
+
+---
+
+## Contribution Workflow
+
+Each contribution goes through five stages before it's filed:
+
+```
+1. Issue        Create a fork issue. No branch without an issue.
+2. Branch       From upstream-mirror. One change per branch.
+3. Cherry-pick  Get the fix into develop without contaminating the branch.
+4. Draft        Write PR draft (docs/fork/upstream/pr-drafts/) and issue draft
+                (docs/fork/upstream/issue-drafts/) while the work is fresh.
+5. File         Issue first → get the number → fill into PR draft → open PR.
+```
+
+The issue draft and PR draft are separate files, both pre-written and ready to paste into GitHub. The two-step filing order (issue before PR) is enforced by most upstream projects' contribution guidelines — having both drafts ready means filing takes minutes, not an hour of writing.
+
+See `docs/filing-guide.md` for the complete filing procedure, PR template sections, screenshot rules, and the upstream bot requirements.
+
+---
+
+## What's Included
+
+```
+FORK_WORKBENCH_TEMPLATE.md          Branch architecture, rules, pipeline reference
+CHEAT_SHEET.md                      One-page daily operations reference
+docs/
+  filing-guide.md                   How to file professional upstream issues and PRs
+  fork/
+    issue-tracker.md                Issue-to-branch map
+    changes-from-upstream.md        Record of every deliberate fork divergence
+    upstream/
+      pr-status.md                  Status of all staged upstream contributions
+      pr-drafts/                    PR drafts, one file per branch
+      issue-drafts/                 Issue drafts, one file per branch
+  runbook.md                        Every pipeline failure mode with recovery steps
+tooling/sync-upstreams/
+  upstream_ingest_pipeline.py       Python pipeline (uv/ruff/pytest)
+  upstream_ingest_pipeline.sh       Node.js pipeline (pnpm/eslint/vitest)
+  rollback_to_lkg.py                Roll back integration to any previous LKG tag
+  gate_failure_tests.py             Verify pipeline gates correctly block failures
+.github/workflows/
+  sync-upstream.yml                 Scheduled CI: daily ingest, standalone
+  sync-upstream-reusable.yml        Reusable workflow for multi-schedule composability
+```
+
+---
+
+## Setup
+
+**1. Create the branch structure**
+
+```bash
+git checkout -b upstream-mirror origin/main
 git checkout -b integration upstream-mirror
 git checkout -b develop integration
 git push origin upstream-mirror integration develop
+```
 
-# 2. Adapt the pipeline for your ecosystem
-#    Python: edit tooling/sync-upstreams/upstream_ingest_pipeline.py
-#    Node.js: edit tooling/sync-upstreams/upstream_ingest_pipeline.sh
-#    Uncomment your gate commands, set PROTECTED_FILES
+**2. Configure the pipeline**
 
-# 3. Set up CI
-#    Copy .github/workflows/sync-upstream.yml
-#    Uncomment your ecosystem section
-#    Set the upstream remote URL
-#    Create a GH_PAT secret (or GitHub App token — see "Authentication" below)
+Open `tooling/sync-upstreams/upstream_ingest_pipeline.py` (or `.sh` for Node.js). Set:
+- `UPSTREAM_REMOTE` — the upstream repo URL
+- `UPSTREAM_BRANCH` — the branch to track (usually `main` or `dev`)
+- `PROTECTED_FILES` — files to restore after every upstream merge
+- Gate commands — uncomment the commands that match your ecosystem
 
-# 4. Verify
+**3. Set up CI**
+
+Copy `.github/workflows/sync-upstream.yml` into your fork. Set the `UPSTREAM_REMOTE_URL` and uncomment your ecosystem's gate section. Create a `GH_PAT` secret (or configure GitHub App authentication — see the comments in the workflow file for both options).
+
+**4. Verify**
+
+```bash
 git checkout integration
 python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --dry-run
-# or
-bash tooling/sync-upstreams/upstream_ingest_pipeline.sh --dry-run
+```
 
-# 5. Run the first sync
+**5. First sync**
+
+```bash
 python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --push
 ```
 
-## How to Use
-
-1. Copy the files into your fork
-2. Read `FORK_WORKBENCH_TEMPLATE.md` — it is the authoritative reference
-3. Adapt the pipeline script for your ecosystem (Python or Node.js are provided)
-4. Configure `PROTECTED_FILES` for your fork-specific files
-5. Set up the CI workflow with your upstream remote URL
-6. Create the required branches (`upstream-mirror`, `integration`, `develop`)
-7. Run the pipeline once manually to verify: `python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --dry-run`
+---
 
 ## Ecosystem Support
 
-| Ecosystem | Pipeline Script | Gate 1 (Build) | Gate 2 (Lint) | Gate 3 (Tests) |
-|-----------|----------------|----------------|---------------|----------------|
+| Ecosystem | Pipeline | Gate 1 | Gate 2 | Gate 3 |
+|-----------|----------|--------|--------|--------|
 | Python (uv) | `upstream_ingest_pipeline.py` | `uv lock --check` | `ruff check .` | `pytest` |
-| Node.js | `upstream_ingest_pipeline.sh` | `pnpm install` | `npx eslint .` | `npx vitest run` |
-| Rust | Adapt pipeline | `cargo check` | `cargo clippy` | `cargo test` |
-| Go | Adapt pipeline | `go build ./...` | `golangci-lint run` | `go test ./...` |
+| Node.js (pnpm) | `upstream_ingest_pipeline.sh` | `pnpm install` | `eslint .` | `vitest run` |
+| Rust | Adapt either script | `cargo check` | `cargo clippy` | `cargo test` |
+| Go | Adapt either script | `go build ./...` | `golangci-lint run` | `go test ./...` |
 
-## CI Workflows
+---
 
-Two options are provided:
+## Design Decisions
 
-### Standalone (`sync-upstream.yml`)
-A self-contained scheduled workflow. Copy it, uncomment your ecosystem, set the upstream URL. Runs daily at 3am UTC.
+**Staging branch isolation.** The pipeline never writes to `integration` directly. All work happens on `sync/staging-TIMESTAMP`. On any failure, `integration` is untouched and the staging branch is cleaned up. This is the same pattern used by Nixpkgs and Homebrew's update bots.
 
-### Reusable (`sync-upstream-reusable.yml`)
-A `workflow_call` workflow designed to be called from another workflow. Use this when you want to:
-- Call the sync from multiple schedules (e.g., 6h and 24h)
-- Compose it with other workflows (e.g., run tests after sync)
-- Pass parameters (ecosystem, branch names, skip-tests) from the caller
+**LKG tags.** Every successful promotion tags `integration` with `LKG-YYYYMMDD-HHMM`. If a bad upstream merge lands, `rollback_to_lkg.py` resets `integration` to any previous tag in seconds. The tags accumulate as a rollback history.
 
-Example caller:
+**Protected files survive every sync.** Fork-specific files — the pipeline itself, CI, and anything with local patches — are listed in `PROTECTED_FILES`. After every upstream merge, the pipeline restores them to their `integration` state. Upstream can never silently overwrite them, and you never need to re-apply patches manually.
+
+**Two-track branch classification.** Every branch is either upstream-candidate (the default) or fork-only (narrow exception). Upstream-candidate branches start from `upstream-mirror` so they contain no fork history — they are PR-ready from day one. Fork-only branches start from `develop` and stay there. Mixing these up produces PRs that can't be merged without rebasing hundreds of commits.
+
+**Issue-first, always.** Every upstream PR needs a corresponding upstream issue filed first, even if a related issue already exists. This is what most upstream contribution guidelines require, and it produces better PR review conversations. Having the issue draft pre-written removes the friction that makes contributors skip this step.
+
+**One PR per concern.** Each contribution branch carries exactly one logical change. This makes reviews faster, reverts safer, and cherry-picks to other branches trivial.
+
+---
+
+## CI Options
+
+**Standalone** (`sync-upstream.yml`): A self-contained workflow that runs on a schedule. Copy it directly, configure it, and it works independently.
+
+**Reusable** (`sync-upstream-reusable.yml`): A `workflow_call` workflow that can be called from other workflows with parameters. Use it when you want to run the sync on multiple schedules or compose it with other CI jobs.
+
 ```yaml
-# .github/workflows/sync-6h.yml
+# Example caller
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -107,45 +186,19 @@ jobs:
   sync:
     uses: ./.github/workflows/sync-upstream-reusable.yml
     with:
-      upstream-remote: "https://github.com/QwenLM/qwen-code.git"
-      ecosystem: node
+      upstream-remote: "https://github.com/upstream-org/project.git"
+      ecosystem: python
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
 ```
 
-## Design Decisions
+Both workflows support GitHub App token authentication (recommended over PATs — short-lived, permission-scoped, auto-revoked). See the commented-out section in each workflow file.
 
-These choices are based on comparison of three real workbenches (qwen-code, odysseus, megalonyx-monorepo) and research into open-source fork patterns (Nixpkgs, Homebrew, and others).
+---
 
-### Staging branch isolation
-The pipeline never modifies `integration` directly. All upstream changes merge into a throwaway `sync/staging-TIMESTAMP` branch first. Only after all gates pass does the pipeline fast-forward `integration`. On any failure, `integration` is untouched.
+## Reference
 
-### LKG tags + rollback
-Every successful promotion creates an annotated `LKG-YYYYMMDD-HHMM` tag. The `rollback_to_lkg.py` script provides safe rollback to any previous tag. This is the safety net — if a bad upstream merge lands, you can recover in seconds.
-
-### Protected files
-Fork-specific files (pipeline scripts, fork CI, docs) are restored to their `integration` version after every upstream merge, even when the merge produces no conflict. This prevents upstream from silently overwriting fork-specific patches.
-
-### Two-category work classification
-Every branch is either **upstream-candidate** (default — branches from `upstream-mirror`, cherry-picks to `develop`, targets upstream PR) or **fork-only** (narrow exception — branches from `develop`, merges back, never goes upstream). This prevents accidental fork-history pollution in upstream PRs.
-
-### GitHub App token authentication (recommended)
-The CI workflow supports both PAT and GitHub App token authentication. GitHub App tokens are short-lived (1 hour), scoped to specific permissions, and auto-revoked. This is superior to long-lived PATs. See the commented-out "Option A" section in `sync-upstream.yml`.
-
-### Failure notification
-The CI workflow can post a comment to a tracking issue when sync fails. Create an issue titled "Upstream Sync" and set the `SYNC_ISSUE_NUMBER` secret. This ensures you learn about sync failures even when away from the repo.
-
-### Concurrency control
-The CI workflow uses `concurrency` groups with `cancel-in-progress: true`. Only one sync runs at a time, and a manual re-run supersedes a stuck scheduled run.
-
-### Draft PR on conflict
-When the upstream merge creates complex conflicts, the runbook documents how to create a draft PR with conflict markers. This enables collaborative conflict resolution and provides visibility into what needs fixing.
-
-## What This Template Does NOT Include
-
-These are valid patterns but intentionally excluded because they add complexity without proportional benefit for most forks:
-
-- **AI-assisted conflict resolution** — emerging pattern (vibegit, forksync) but not yet reliable enough for production use
-- **Two-remote fork-as-filter** — megalonyx's architecture is specific to its constraint (private monorepo that can't be a GitHub fork). For normal forks, a single pipeline is sufficient
-- **Merge queue gating** — Nixpkgs' two-stage merge queue is overkill for most forks. Staging branch isolation provides the same safety with less complexity
-- **Auto-merge bots** — useful for dependency update PRs but not for upstream sync where human judgment is needed
+- `FORK_WORKBENCH_TEMPLATE.md` — complete branch architecture, pipeline internals, pre-flight checklist, release procedure
+- `docs/filing-guide.md` — upstream issue and PR filing: templates, bot requirements, screenshot rules, cross-platform notes
+- `docs/runbook.md` — every pipeline failure mode with step-by-step recovery
+- `CHEAT_SHEET.md` — daily operations in one page

@@ -9,7 +9,8 @@
 | [issue-tracker.md](./issue-tracker.md) | Maps issues to branches, tracks labels and status | Agents and contributors filing upstream PRs |
 | [changes-from-upstream.md](./changes-from-upstream.md) | Master record of every deliberate divergence from upstream | Pipeline maintainers, contributors checking if a file is protected |
 | [upstream/pr-status.md](./upstream/pr-status.md) | Status of all staged upstream contributions | Agents preparing to file PRs |
-| [upstream/pr-drafts/](./upstream/pr-drafts/) | PR draft files for individual contributions | Contributors filing upstream PRs |
+| [upstream/pr-drafts/](./upstream/pr-drafts/) | PR draft files, one per staging branch — title, description, filing notes | Contributors filing upstream PRs |
+| [upstream/issue-drafts/](./upstream/issue-drafts/) | Upstream issue drafts, one per staging branch — pre-written, ready to paste | Contributors filing upstream issues before PRs |
 
 ## Protected Files
 

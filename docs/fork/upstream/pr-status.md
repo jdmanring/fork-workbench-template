@@ -22,6 +22,7 @@ A branch is "ready to file" when:
 ## Filing an Upstream PR
 
 1. Verify the branch with the health checks in FORK_WORKBENCH_TEMPLATE.md
-2. Create an issue on the upstream repo (if one doesn't exist)
-3. Open PR: `<your-fork>:<branch>` → `<upstream-org>:<project>:main`
-4. Add the upstream issue number and PR link to this table
+2. Open `docs/fork/upstream/issue-drafts/<name>.md` — paste title and body into the upstream new-issue form
+3. Fill the assigned issue number into `Fixes #` in the PR draft
+4. Open PR: `<your-fork>:<branch>` → `<upstream-org>/<project>:<dev-branch>`
+5. Add the upstream issue number and PR link to this table
