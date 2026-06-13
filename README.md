@@ -124,18 +124,20 @@ git checkout fix/thing   # branch stays — it's the staging target for the upst
 
 ## Contribution Lifecycle
 
+Before creating a branch, scan the upstream project: search open issues, open pull requests, discussions, and any ROADMAP or milestone files. Duplicate issues are closed without comment. A PR that conflicts with an in-progress upstream effort wastes everyone's time. An existing related PR is an opportunity to collaborate rather than compete, and a ROADMAP item tells you how the maintainers plan to solve the problem — align with that approach or expect friction at review.
+
 ```
-Issue      →  Branch        →  Draft             →  File
-────────────────────────────────────────────────────────
-Create        From               Write              Issue first —
-fork issue    upstream-mirror.   issue-drafts/      paste from draft,
-first.        One change.        and pr-drafts/     get number, fill
-No branch     No fork            while the work     into PR draft,
-without       history.           is fresh.          then open PR.
-an issue.
+Scan       →  Issue      →  Branch        →  Draft             →  File
+───────────────────────────────────────────────────────────────────────
+Upstream       Create        From               Write              Issue first —
+issues,        fork issue    upstream-mirror.   issue-drafts/      paste from draft,
+open PRs,      first.        One change.        and pr-drafts/     get number, fill
+discussions,   No branch     No fork            while the work     into PR draft,
+ROADMAP.       without       history.           is fresh.          then open PR.
+               an issue.
 ```
 
-There are two separate issues involved and they serve different purposes. The **fork-side tracking issue** (first column) is filed on your own fork's issue tracker before you branch — it's how you track in-progress work and ensure no branch exists without a record. The **upstream issue** (last column) is filed against the upstream project at submission time, using a pre-written draft. They are filed at different points in the workflow and go to different places.
+There are two separate issues involved and they serve different purposes. The **fork-side tracking issue** (Issue column) is filed on your own fork's issue tracker before you branch — it's how you track in-progress work and ensure no branch exists without a record. The **upstream issue** (File column) is filed against the upstream project at submission time, using a pre-written draft. They are filed at different points in the workflow and go to different places.
 
 The issue draft and PR draft are separate files in `docs/fork/upstream/`. Both are pre-written with the upstream project's exact templates — issue body fully filled out, PR description with all required sections pre-checked. The two-step filing order (issue before PR) is what most upstream CONTRIBUTING.md files require, and having the drafts pre-written is the only way this step doesn't become a bottleneck.
 

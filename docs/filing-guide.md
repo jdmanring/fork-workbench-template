@@ -8,6 +8,20 @@ How to file a professional, complete upstream issue and pull request from a cont
 
 ## Part 1: Filing an Upstream Issue
 
+### Before You Start (pre-branch)
+
+Do this scan before creating a branch or writing any code. Finding a conflict after the work is done wastes the work.
+
+**Issues** — Search the upstream project's open and closed issues for the bug or feature you plan to address. A duplicate issue is closed without comment; a closed issue may reveal that the maintainers deliberately decided not to fix the problem.
+
+**Open pull requests** — Search open PRs for work covering the same area. An in-progress PR that overlaps yours is an opportunity to collaborate, not compete. Comment on it, offer your findings, or coordinate scope before opening a separate PR. Two PRs touching the same files in the same area will conflict at review time and one will get closed.
+
+**Discussions** — Check the upstream discussions tab (if the project uses it). Planned direction, rejected approaches, and ongoing design conversations often live there rather than in issues. Filing a PR that contradicts an active discussion rarely goes well.
+
+**ROADMAP / milestones** — If the upstream project publishes a ROADMAP file or uses milestone labels, check whether your intended change is already planned. If it is, align with the maintainers' intended approach rather than inventing your own — or reach out first to confirm your implementation matches what they want.
+
+After the scan: if nothing conflicts, proceed. If something overlaps, decide whether to coordinate, adjust scope, or hold off. Either way, document what you found in your PR draft's Filing Notes so the human filing the PR has the full context.
+
 ### Before You File
 
 1. Search existing issues on the upstream repo for the bug or feature. Duplicate issues are closed without comment.
