@@ -121,8 +121,8 @@ Two concrete uses:
 upstream project
     ↓  (your ingest pipeline)
 your fork's main  ←── tagged, stable, patched
-    ↓  (downstream's ingest pipeline)
-downstream project's integration → develop
+    ↓  (downstream treats your main as their upstream remote)
+downstream's upstream-mirror → sync/staging → [gates] → integration → develop
 ```
 
 This chain works cleanly because `main` contains only what the downstream project needs: upstream changes plus your patches, with no fork-management state, no staging branches, no issue-drafts directory visible to the downstream pipeline.
