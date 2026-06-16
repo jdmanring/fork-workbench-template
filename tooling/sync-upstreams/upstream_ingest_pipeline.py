@@ -10,12 +10,19 @@ Usage:
     python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --skip-tests           # sync, skip tests (CI mode)
     python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --push                 # push after success
 
-Adaptation guide:
+Adaptation guide (REQUIRED when setting up a new fork):
     1. Set INTEGRATION_BRANCH, MIRROR_BRANCH, UPSTREAM_BRANCH for your repo
     2. Set REQUIRED_REMOTES to match your remote names
     3. Edit PROTECTED_FILES to list your fork-specific files
     4. Edit the GateKeeper methods to match your build/lint/test commands
-    5. Run --dry-run to verify
+       — this is the most common source of pipeline failures
+       — see detect_ecosystem() for auto-detection of common toolchains
+    5. Run --dry-run to verify all gates pass
+
+Tech stack detection:
+    The detect_ecosystem() helper identifies your project's package manager,
+    linter, and test runner from config files. Use it in your gate methods
+    to auto-configure commands. If auto-detection is wrong, override manually.
 """
 
 import argparse
@@ -65,6 +72,64 @@ AUTO_RESOLVE_OURS: frozenset[str] = frozenset({
     # Add your auto-resolve files here:
     # "Cargo.lock",
 })
+
+
+def detect_ecosystem(root: Path) -> dict[str, str]:
+    """Detect the project's toolchain from config files.
+
+    Returns a dict with keys: package_manager, linter, test_runner.
+    Values are command strings suitable for subprocess, or "" if not detected.
+
+    Use this in your gate methods to auto-configure commands:
+        eco = detect_ecosystem(REPO_ROOT)
+        if eco["package_manager"] == "npm":
+            subprocess.run(["npm", "ci", "--ignore-scripts"], ...)
+    """
+    # Package manager
+    if (root / "pnpm-lock.yaml").exists():
+        pkg_mgr = "pnpm"
+    elif (root / "package-lock.json").exists():
+        pkg_mgr = "npm"
+    elif (root / "yarn.lock").exists():
+        pkg_mgr = "yarn"
+    elif (root / "uv.lock").exists() or (root / "pyproject.toml").exists():
+        pkg_mgr = "uv"
+    elif (root / "Cargo.toml").exists():
+        pkg_mgr = "cargo"
+    elif (root / "go.mod").exists():
+        pkg_mgr = "go"
+    else:
+        pkg_mgr = ""
+
+    # Linter
+    if (root / "eslint.config.js").exists() or (root / "eslint.config.mjs").exists() or (root / "eslint.config.cjs").exists():
+        linter = "eslint"
+    elif any((root / f).exists() for f in [".eslintrc.js", ".eslintrc.cjs", ".eslintrc.json", ".eslintrc.yaml", ".yml"]):
+        linter = "eslint"
+    elif (root / "pyproject.toml").exists() and (root / "ruff.toml").exists():
+        linter = "ruff"
+    elif (root / ".golangci.yml").exists() or (root / ".golangci.yaml").exists():
+        linter = "golangci"
+    elif (root / "Cargo.toml").exists():
+        linter = "clippy"
+    else:
+        linter = ""
+
+    # Test runner
+    if any((root / f).exists() for f in ["vitest.config.ts", "vitest.config.js", "vitest.config.mjs"]):
+        test_runner = "vitest"
+    elif any((root / f).exists() for f in ["jest.config.ts", "jest.config.js", "jest.config.mjs"]):
+        test_runner = "jest"
+    elif (root / "pytest.ini").exists() or (root / "setup.cfg").exists() or (root / "pyproject.toml").exists():
+        test_runner = "pytest"
+    elif (root / "go.mod").exists():
+        test_runner = "go-test"
+    elif (root / "Cargo.toml").exists():
+        test_runner = "cargo-test"
+    else:
+        test_runner = ""
+
+    return {"package_manager": pkg_mgr, "linter": linter, "test_runner": test_runner}
 
 
 class Colors:

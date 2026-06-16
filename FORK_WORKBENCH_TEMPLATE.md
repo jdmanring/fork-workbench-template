@@ -156,40 +156,82 @@ This is a manual step — the pipeline does not auto-merge to `develop`.
 
 ## Gates — Customize to Your Project
 
-The three gates below are the recommended defaults. Adapt commands to your project's build system.
+The pipeline has three gates. **All three must pass** before upstream changes are promoted to `integration`. The gates must match your project's actual tech stack — a pipeline copied from a different project will fail.
 
-### Gate 1: Build Verification
+### Gate 1: Build Verification (lockfile + compile)
 
-The project compiles and dependencies are consistent.
+Verifies dependencies are consistent and the project compiles. This is the most important gate — if this fails, nothing else matters.
 
-| Ecosystem | Command |
-|-----------|---------|
-| Python (uv) | `uv lock --check` |
-| Node (npm/pnpm) | `npm install` or `pnpm install` |
-| Rust | `cargo check` |
-| Go | `go build ./...` |
+**For Node.js projects (npm):**
+```bash
+npm ci --ignore-scripts
+```
+This installs exactly what's in `package-lock.json`. If the lockfile is out of sync with `package.json`, it fails. Never use `npm install` for this gate — it silently updates the lockfile.
+
+**For Node.js projects (pnpm):**
+```bash
+pnpm install --frozen-lockfile
+```
+
+**For Python projects (uv):**
+```bash
+uv lock --check
+```
+Only works if a root `pyproject.toml` exists. If your project has no root `pyproject.toml` (e.g., a Node.js project with only a Python SDK sub-project), **do not use this gate** — use `npm ci` instead.
+
+**For Rust projects:**
+```bash
+cargo check
+```
 
 ### Gate 2: Lint
 
-The project passes its linting standards.
+Verifies code style. Use whatever linter your project already uses — do not introduce a new one.
 
-| Ecosystem | Command |
-|-----------|---------|
-| Python | `ruff check .` |
-| Node | `npx eslint .` |
-| Rust | `cargo clippy -- -D warnings` |
-| Go | `golangci-lint run` |
+**For TypeScript/JavaScript projects:**
+```bash
+npx eslint . --ext .ts,.tsx --max-warnings 0
+```
+
+**Warning about `--max-warnings 0`:** This is strict. If the upstream codebase has pre-existing lint warnings (which is common), this gate will fail on every sync. Two strategies:
+
+- **Strict (recommended for new projects):** Fix all warnings on `integration` before running the pipeline. The pipeline then catches any new warnings from upstream.
+- **Lenient (for projects with lint debt):** Omit `--max-warnings 0` and use `--max-warnings <N>` with a threshold. Document the current warning count and fail only if it increases.
+
+**For Python projects:**
+```bash
+ruff check .
+```
 
 ### Gate 3: Tests
 
-The project passes its test suite.
+Verifies the test suite passes. This gate is the most likely to be slow, so it supports a `--skip-tests` flag for CI.
 
-| Ecosystem | Command |
-|-----------|---------|
-| Python | `pytest` or `python -m pytest` |
-| Node | `npx vitest run` or `npm test` |
-| Rust | `cargo test` |
-| Go | `go test ./...` |
+**For Node.js projects (Vitest):**
+```bash
+npx vitest run
+```
+
+**For Python projects:**
+```bash
+python -m pytest
+```
+
+### Adapting Gates When Copying the Pipeline
+
+The pipeline scripts in `tooling/sync-upstreams/` are templates — they must be adapted to your project. The most common mistake is copying a pipeline from a different ecosystem (e.g., using `uv lock --check` on a Node.js project).
+
+**Checklist when setting up the pipeline on a new fork:**
+
+1. Identify your project's package manager: check for `package.json`, `pnpm-lock.yaml`, `uv.lock`, `Cargo.toml`
+2. Set Gate 1 to the matching lockfile check command
+3. Identify your linter: check for `eslint.config.js`, `pyproject.toml` (ruff config), `.golangci.yml`
+4. Set Gate 2 to the matching lint command
+5. Identify your test runner: check for `vitest.config.ts`, `pytest.ini`, `go.mod`
+6. Set Gate 3 to the matching test command
+7. Run `--dry-run` to verify all gates pass on the current state
+
+**Do not skip Gate 1.** If your project has no lockfile, create one. The lockfile gate is the primary defense against "works on my machine" divergence.
 
 ---
 
@@ -256,6 +298,120 @@ git branch -D sync/staging-TIMESTAMP
 | Not on `integration` branch | `git checkout integration` |
 | Uncommitted changes | `git stash` or commit them |
 | Missing `upstream` remote | `git remote add upstream <url>` |
+| Missing tooling dependency | Install the required tool (see gate checklist above) |
+
+### Upstream introduces type errors or lint warnings
+
+Sometimes upstream merges code that doesn't pass its own typecheck or lint. This is not your fork's fault, but the pipeline gates will block on it.
+
+**Diagnosis:** Run the failing gate locally on `upstream/main` (not your fork) to confirm the error exists upstream:
+```bash
+git fetch upstream
+git stash
+git checkout upstream/main
+npx eslint . --ext .ts,.tsx  # or the failing gate
+```
+
+**If the error exists upstream:** You have three options:
+1. **Wait for upstream to fix it.** File an upstream issue. Meanwhile, your fork is blocked.
+2. **Apply a minimal fix on the staging branch.** Fix only what the gate requires, commit on the staging branch, and re-run. Document the fix so it can be reverted when upstream catches up.
+3. **Lower the gate strictness temporarily.** For example, switch from `--max-warnings 0` to `--max-warnings <N>` where N is the current upstream warning count. Document the threshold so future agents know it's a workaround, not a standard.
+
+**Never bypass a gate permanently.** If you lower a gate's strictness, create an issue to restore it once upstream is fixed.
+
+### Merge conflict markers in upstream code
+
+Occasionally, upstream merges code with unresolved merge conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`). This happens when upstream maintainers resolve conflicts incorrectly or when a rebase goes wrong.
+
+**Detection:** The build gate will fail with errors like `TS1185: Merge conflict marker encountered`.
+
+**Resolution:**
+```bash
+# Find all files with conflict markers
+grep -rl '<<<<<<<' src/ --include='*.ts' --include='*.tsx'
+
+# For each file, resolve manually — there is no safe auto-resolution
+# Choose the correct side (usually HEAD/theirs) and remove markers
+# Then commit the fix on the staging branch
+git add <resolved files>
+git commit -m "chore(sync): resolve merge conflict markers from upstream"
+```
+
+**Prevention:** This is an upstream quality issue. If it happens repeatedly, consider filing an upstream issue about their merge process.
+
+---
+
+## Pre-Commit Hook Bypass for Pipeline Operations
+
+The pipeline commits and tags on the `integration` branch. If your fork uses pre-commit hooks (husky, lint-staged, etc.), they may block pipeline commits — especially if the hooks require tooling that isn't installed in the current environment.
+
+**The safe bypass:**
+
+```bash
+# For husky hooks:
+HUSKY=0 git commit -m "chore(sync): ..."
+
+# For git's built-in --no-verify (skips ALL hooks — pre-commit AND pre-push):
+git commit --no-verify -m "chore(sync): ..."
+```
+
+**Rules:**
+- Only bypass hooks during pipeline operations (sync commits, conflict resolution, protected file restoration)
+- Never bypass hooks on `develop` or contribution branches
+- If a hook fails because tooling is missing (e.g., `npm: command not found`), install the tool rather than bypassing — the hook is telling you something is wrong
+- If a hook fails because of upstream-introduced lint warnings, that's a gate failure — fix it properly, don't bypass
+
+---
+
+## Pipeline Adaptation Guide
+
+When setting up a new fork, the pipeline must be adapted to the project's tech stack. This is the most common source of pipeline failures.
+
+### Step 1: Identify your project's toolchain
+
+```bash
+# Package manager
+ls package.json pnpm-lock.yaml yarn.lock package-lock.json 2>/dev/null
+
+# Linter
+ls eslint.config.js .eslintrc.* pyproject.toml .golangci.yml 2>/dev/null
+
+# Test runner
+ls vitest.config.* jest.config.* pytest.ini go.mod Cargo.toml 2>/dev/null
+
+# Build system
+ls tsconfig.json Makefile Cargo.toml build.gradle 2>/dev/null
+```
+
+### Step 2: Configure the pipeline
+
+Edit `tooling/sync-upstreams/upstream_ingest_pipeline.py` (or `.sh`) to use the correct commands. See the "Gates" section above for the mapping.
+
+### Step 3: Verify with dry-run
+
+```bash
+git checkout integration
+python3 tooling/sync-upstreams/upstream_ingest_pipeline.py --dry-run
+```
+
+All three gates should pass. If they don't, fix the issue before running a real sync.
+
+### Step 4: Commit the adapted pipeline
+
+```bash
+git add tooling/sync-upstreams/
+git commit -m "chore(pipeline): adapt gates for <ecosystem> project"
+```
+
+### Common adaptation mistakes
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Using `uv lock --check` on a Node.js project | `error: No pyproject.toml found` | Switch to `npm ci --ignore-scripts` |
+| Using `ruff` on a TypeScript project | `ruff: command not found` | Switch to `npx eslint . --ext .ts,.tsx` |
+| Using `npm install` instead of `npm ci` | Lockfile silently updated, gate always passes | Switch to `npm ci` |
+| Using `--max-warnings 0` on a project with lint debt | Gate fails on every sync | Use `--max-warnings <N>` with documented threshold |
+| Copying a pipeline from a different fork without adaptation | Wrong tools, wrong commands | Run the adaptation checklist above |
 | Missing tooling dependency | Install the required tool |
 
 ---
@@ -427,6 +583,9 @@ Sometimes a contribution branch's changes have already been merged upstream. The
 | Creating a branch without an issue | Untraceable work | Create issue first, always |
 | Editing `develop` directly for upstream-candidate work | Creates untracked work with no branch/issue/PR | Branch from upstream-mirror, commit there, cherry-pick to develop |
 | Forgetting to update docs | Future agents and contributors lack context | Update fork documentation for new/modified files |
+| Copying a pipeline from a different fork without adaptation | Wrong tools, wrong commands, gates always fail | Run the Pipeline Adaptation Checklist — identify your toolchain first |
+| Using `uv lock --check` on a Node.js project | `No pyproject.toml found` — pipeline can never pass | Use `npm ci --ignore-scripts` instead |
+| Using `ruff` on a TypeScript project | `ruff: command not found` | Use `npx eslint . --ext .ts,.tsx` instead |
 
 ---
 

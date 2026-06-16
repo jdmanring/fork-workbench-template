@@ -264,44 +264,87 @@ cleanup_staging() {
 }
 
 # ── Gate 1: Build verification ──────────────────────────────────
+#
+# Uncomment ONE block based on your project's package manager.
+# If your project has no lockfile, create one first.
+#
 gate_build() {
     log_info "Gate 1/3: Build verification..."
 
-    # ── pnpm ──
-    # if command -v pnpm &>/dev/null; then
+    # ── npm (Node.js) ────────────────────────────────────────────
+    # Verifies package-lock.json is in sync and installs exactly
+    # what's locked. Use --ignore-scripts to skip postinstall hooks
+    # that may require build artifacts.
+    if command -v npm &>/dev/null && [[ -f "package-lock.json" ]]; then
+        if ! npm ci --ignore-scripts 2>/dev/null; then
+            log_error "Build gate failed — npm ci failed."
+            log_error "Fix: run 'npm install' to regenerate lockfile, then commit."
+            return 1
+        fi
+    # ── pnpm (Node.js) ───────────────────────────────────────────
+    # elif command -v pnpm &>/dev/null && [[ -f "pnpm-lock.yaml" ]]; then
     #     if ! pnpm install --frozen-lockfile 2>/dev/null; then
     #         log_error "Build gate failed — pnpm install failed."
     #         return 1
     #     fi
-    # fi
-
-    # ── npm ──
-    # if ! npm ci 2>/dev/null; then
-    #     log_error "Build gate failed — npm ci failed."
-    #     return 1
-    # fi
+    # ── Python (uv) ──────────────────────────────────────────────
+    # elif command -v uv &>/dev/null && [[ -f "pyproject.toml" ]]; then
+    #     if ! uv lock --check 2>/dev/null; then
+    #         log_error "Build gate failed — lockfile out of sync."
+    #         log_error "Fix: run 'uv lock' to regenerate, then commit."
+    #         return 1
+    #     fi
+    else
+        log_error "No recognized package manager or lockfile found."
+        log_error "Expected one of: package-lock.json, pnpm-lock.yaml, pyproject.toml"
+        return 1
+    fi
 
     log_ok "Build gate passed."
     return 0
 }
 
 # ── Gate 2: Lint ────────────────────────────────────────────────
+#
+# Uncomment ONE block based on your project's linter.
+# Do NOT introduce a new linter — use whatever the project already has.
+#
 gate_lint() {
     log_info "Gate 2/3: Lint..."
 
-    # ── ESLint ──
-    # if command -v npx &>/dev/null; then
-    #     if ! npx eslint . 2>/dev/null; then
+    # ── ESLint (TypeScript/JavaScript) ──────────────────────────
+    if command -v npx &>/dev/null && [[ -f "eslint.config.js" || -f ".eslintrc.js" || -f ".eslintrc.json" || -f ".eslintrc" ]]; then
+        # --max-warnings 0 is strict. If upstream has pre-existing lint
+        # warnings, use --max-warnings <N> where N is the current count.
+        if ! npx eslint . --ext .ts,.tsx --max-warnings 0 2>/dev/null; then
+            log_error "Lint gate failed."
+            log_error "Fix: run 'npx eslint . --ext .ts,.tsx --fix' to auto-fix."
+            return 1
+        fi
+    # ── Ruff (Python) ────────────────────────────────────────────
+    # elif command -v ruff &>/dev/null || command -v uv &>/dev/null; then
+    #     RUFF_CMD="ruff"
+    #     command -v ruff &>/dev/null || RUFF_CMD="uv run ruff"
+    #     if ! $RUFF_CMD check . 2>/dev/null; then
     #         log_error "Lint gate failed."
     #         return 1
     #     fi
-    # fi
+    else
+        log_warn "No recognized linter config found — skipping lint gate."
+        log_warn "If your project has a linter, configure it in gate_lint()."
+        return 0
+    fi
 
     log_ok "Lint gate passed."
     return 0
 }
 
 # ── Gate 3: Tests ───────────────────────────────────────────────
+#
+# Uncomment ONE block based on your project's test runner.
+# This gate supports --skip-tests for CI environments where tests
+# are too slow or require services.
+#
 gate_tests() {
     if [[ "$SKIP_TESTS" == "true" ]]; then
         log_warn "Gate 3/3: Tests skipped (--skip-tests / CI mode)."
@@ -310,13 +353,28 @@ gate_tests() {
 
     log_info "Gate 3/3: Tests..."
 
-    # ── Vitest ──
-    # if command -v npx &>/dev/null; then
-    #     if ! npx vitest run 2>/dev/null; then
+    # ── Vitest (Node.js) ─────────────────────────────────────────
+    if command -v npx &>/dev/null && [[ -f "vitest.config.ts" || -f "vitest.config.js" ]]; then
+        if ! npx vitest run 2>/dev/null; then
+            log_error "Test gate failed."
+            return 1
+        fi
+    # ── npm test (Node.js) ───────────────────────────────────────
+    # elif [[ -f "package.json" ]]; then
+    #     if ! npm test 2>/dev/null; then
     #         log_error "Test gate failed."
     #         return 1
     #     fi
-    # fi
+    # ── pytest (Python) ──────────────────────────────────────────
+    # elif command -v python3 &>/dev/null && [[ -f "pyproject.toml" || -f "pytest.ini" || -f "setup.cfg" ]]; then
+    #     if ! python3 -m pytest 2>/dev/null; then
+    #         log_error "Test gate failed."
+    #         return 1
+    #     fi
+    else
+        log_warn "No recognized test runner found — skipping test gate."
+        return 0
+    fi
 
     log_ok "Test gate passed."
     return 0
