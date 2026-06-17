@@ -17,6 +17,10 @@ If you found a bug:
 
 All fixes default to **upstream-candidate** — they are staged as pull requests targeting the upstream repository.
 
+### Mandatory Protocol (for AI agents and humans)
+
+To prevent contamination and technical debt, all contributions MUST follow the step-by-step execution sequence defined in `docs/contribution-protocol.md`. This protocol is the authoritative guide for ensuring a clean, single-purpose contribution.
+
 ### Workflow
 
 1. Create an issue on this fork (or reference an existing one)

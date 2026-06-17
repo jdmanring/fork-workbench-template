@@ -1,6 +1,6 @@
 # Fork Workbench Template
 
-> **The standard for contribution workbenches.** This document is the authoritative reference for the branch architecture, workflow rules, and operational procedures of this fork. Read it completely before touching any branch.
+This is the main guide for the branch architecture, workflow rules, and procedures of this fork. Read it before starting any work.
 
 This fork is a contribution workbench. Every fix, feature, and document defaults to upstream-candidate unless it specifically manages the fork/upstream relationship.
 
@@ -109,8 +109,31 @@ Every piece of work starts with a GitHub issue. No exceptions.
 
 ---
 
-## Upstream Ingest Pipeline
+## Keeping the fork clean
 
+To keep the codebase predictable, follow these rules for the following patterns:
+
+### Sync before rebase
+
+**NEVER** rebase a contribution branch onto a stale `upstream-mirror`. 
+
+If `upstream-mirror` is behind `upstream/main` (check via `git rev-list origin/upstream-mirror..upstream/main`), you must first run the ingest pipeline to sync `upstream-mirror` to the latest upstream state. Rebasing on a stale point causes unnecessary diffs and redundant work.
+
+### Mixed-content and Orphaned Branches
+
+**Mixed-content (Contamination):**
+A branch that mixes unrelated changes (e.g., a feature fix + dependency upgrades).
+- **Rule:** Every contribution must be a single-purpose branch. 
+- **Fix:** Extract the real fix/feature into a clean branch from `upstream-mirror`. The original branch stays on origin as history.
+
+**Orphaned Branches (Disconnected History):**
+A branch that has no common ancestor with `upstream-mirror` or `develop`. This usually happens when an agent branches from an old upstream commit instead of the current `upstream-mirror`.
+- **Rule:** All contribution branches must be based on `upstream-mirror`.
+- **Fix:** Re-create the contribution from `upstream-mirror` (or `develop` for fork-only work) using only the relevant commits.
+
+---
+
+## Upstream Ingest Pipeline
 Upstream changes flow into this fork through a verified pipeline. **Never bypass it.**
 
 ```
@@ -586,6 +609,27 @@ Sometimes a contribution branch's changes have already been merged upstream. The
 | Copying a pipeline from a different fork without adaptation | Wrong tools, wrong commands, gates always fail | Run the Pipeline Adaptation Checklist — identify your toolchain first |
 | Using `uv lock --check` on a Node.js project | `No pyproject.toml found` — pipeline can never pass | Use `npm ci --ignore-scripts` instead |
 | Using `ruff` on a TypeScript project | `ruff: command not found` | Use `npx eslint . --ext .ts,.tsx` instead |
+
+---
+
+## How to write docs
+
+To make sure these docs are easy for both humans and AI to use, follow these rules:
+
+### 1. Stick to the facts
+Prioritize technical info over narrative.
+- **No buzzwords**: Avoid words like "robust," "comprehensive," "seamless," or "powerful." If something is "robust," prove it with a test case; don't use the word.
+- **No fluff**: Remove all "intro" and "outro" text (e.g., "In this guide, we will..."). Start with the requirement.
+- **Specs, not tutorials**: Write what MUST happen (the specification) rather than just how to do it (the tutorial). Focus on invariants and constraints.
+
+### 2. Be direct
+- **Use clear commands**: Use **MUST**, **NEVER**, and **REQUIRED** to define boundaries. Avoid "It is recommended that..." or "You might want to...".
+- **Provide the exact command**: Every action must include the exact, copy-pasteable bash command required to perform it. Never describe a command in prose if you can just provide the code.
+- **Use checklists**: Present all multi-step processes as checklists (e.g., `[ ] Step 1`). Do not use paragraphs to describe a sequence.
+
+### 3. Keep it clear
+- **Use bolding and tables** to highlight constraints.
+- **Use specific names** for files and directories. Avoid `utils` or `helpers` if you can use something like `path-normalization-utils`.
 
 ---
 
